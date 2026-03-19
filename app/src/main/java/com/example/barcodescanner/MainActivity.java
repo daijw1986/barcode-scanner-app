@@ -2,6 +2,12 @@ package com.example.barcodescanner;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.media.AudioAttributes;
+import android.media.SoundPool;
+import android.os.Build;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
@@ -49,6 +55,10 @@ public class MainActivity extends AppCompatActivity {
     private TextView textViewResult;
     private BarcodeScanner barcodeScanner;
     private ExecutorService cameraExecutor;
+    private SoundPool soundPool;
+    private int soundSuccess;
+    private int soundFail;
+    private Vibrator vibrator;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,6 +73,12 @@ public class MainActivity extends AppCompatActivity {
                 .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
                 .build();
         barcodeScanner = BarcodeScanning.getClient(options);
+
+        // 初始化声音池
+        initSoundPool();
+
+        // 初始化震动器
+        initVibrator();
 
         cameraExecutor = Executors.newSingleThreadExecutor();
 
@@ -146,12 +162,18 @@ public class MainActivity extends AppCompatActivity {
                                 runOnUiThread(() -> {
                                     textViewResult.setText("识别结果:\n" + value);
                                     Toast.makeText(this, "识别成功!", Toast.LENGTH_SHORT).show();
+                                    // 成功提示音和震动
+                                    playSuccessFeedback();
                                 });
                             }
                         }
                     })
                     .addOnFailureListener(e -> {
                         Log.e(TAG, "扫描失败", e);
+                        runOnUiThread(() -> {
+                            // 失败提示音和震动
+                            playFailFeedback();
+                        });
                     })
                     .addOnCompleteListener(task -> {
                         imageProxy.close();
@@ -223,7 +245,86 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (soundPool != null) {
+            soundPool.release();
+            soundPool = null;
+        }
         cameraExecutor.shutdown();
         barcodeScanner.close();
+    }
+
+    private void initSoundPool() {
+        // 创建声音池
+        AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build();
+
+        soundPool = new SoundPool.Builder()
+                .setMaxStreams(2)
+                .setAudioAttributes(audioAttributes)
+                .build();
+
+        // 加载系统默认通知音效作为成功/失败声音
+        // 使用系统内置声音，无需额外资源文件
+        soundSuccess = soundPool.load(this, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI, 1);
+        soundFail = soundPool.load(this, android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI, 1);
+    }
+
+    private void initVibrator() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            VibratorManager vibratorManager = (VibratorManager) getSystemService(VIBRATOR_MANAGER_SERVICE);
+            vibrator = vibratorManager.getDefaultVibrator();
+        } else {
+            vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+        }
+    }
+
+    // 播放成功提示音
+    private void playSuccessSound() {
+        if (soundPool != null && soundSuccess != 0) {
+            soundPool.play(soundSuccess, 1.0f, 1.0f, 1, 0, 1.0f);
+        }
+    }
+
+    // 播放失败提示音
+    private void playFailSound() {
+        if (soundPool != null && soundFail != 0) {
+            soundPool.play(soundFail, 1.0f, 1.0f, 1, 0, 1.0f);
+        }
+    }
+
+    // 成功震动 - 短震动
+    private void vibrateSuccess() {
+        if (vibrator != null && vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE));
+            } else {
+                vibrator.vibrate(100);
+            }
+        }
+    }
+
+    // 失败震动 - 长震动
+    private void vibrateFail() {
+        if (vibrator != null && vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 200, 100, 200}, -1));
+            } else {
+                vibrator.vibrate(new long[]{0, 200, 100, 200}, -1);
+            }
+        }
+    }
+
+    // 组合提示 - 成功
+    private void playSuccessFeedback() {
+        playSuccessSound();
+        vibrateSuccess();
+    }
+
+    // 组合提示 - 失败
+    private void playFailFeedback() {
+        playFailSound();
+        vibrateFail();
     }
 }
