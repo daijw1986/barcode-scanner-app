@@ -2,8 +2,8 @@ package com.example.barcodescanner;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
-import android.media.AudioAttributes;
-import android.media.SoundPool;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.os.Build;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -15,8 +15,6 @@ import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.media.Image;
-import android.media.RingtoneManager;
-import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Size;
@@ -57,9 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView textViewResult;
     private BarcodeScanner barcodeScanner;
     private ExecutorService cameraExecutor;
-    private SoundPool soundPool;
-    private int soundSuccess;
-    private int soundFail;
+    private ToneGenerator toneGenerator;
     private Vibrator vibrator;
 
     @Override
@@ -76,8 +72,8 @@ public class MainActivity extends AppCompatActivity {
                 .build();
         barcodeScanner = BarcodeScanning.getClient(options);
 
-        // 初始化声音池
-        initSoundPool();
+        // 初始化音调生成器
+        initToneGenerator();
 
         // 初始化震动器
         initVibrator();
@@ -247,39 +243,20 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (soundPool != null) {
-            soundPool.release();
-            soundPool = null;
+        if (toneGenerator != null) {
+            toneGenerator.release();
+            toneGenerator = null;
         }
         cameraExecutor.shutdown();
         barcodeScanner.close();
     }
 
-    private void initSoundPool() {
-        // 创建声音池
-        AudioAttributes audioAttributes = new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build();
-
-        soundPool = new SoundPool.Builder()
-                .setMaxStreams(2)
-                .setAudioAttributes(audioAttributes)
-                .build();
-
-        // 通过 RingtoneManager 获取系统默认通知音
+    private void initToneGenerator() {
+        // 创建音调生成器，使用通知音量
         try {
-            Uri notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-            Uri alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-            
-            if (notificationUri != null) {
-                soundSuccess = soundPool.load(this, notificationUri, 1);
-            }
-            if (alarmUri != null) {
-                soundFail = soundPool.load(this, alarmUri, 1);
-            }
+            toneGenerator = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100);
         } catch (Exception e) {
-            Log.e(TAG, "加载系统音效失败", e);
+            Log.e(TAG, "初始化音调生成器失败", e);
         }
     }
 
@@ -292,17 +269,17 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // 播放成功提示音
+    // 播放成功提示音 - 使用通知音调
     private void playSuccessSound() {
-        if (soundPool != null && soundSuccess != 0) {
-            soundPool.play(soundSuccess, 1.0f, 1.0f, 1, 0, 1.0f);
+        if (toneGenerator != null) {
+            toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 150);
         }
     }
 
-    // 播放失败提示音
+    // 播放失败提示音 - 使用错误音调
     private void playFailSound() {
-        if (soundPool != null && soundFail != 0) {
-            soundPool.play(soundFail, 1.0f, 1.0f, 1, 0, 1.0f);
+        if (toneGenerator != null) {
+            toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 300);
         }
     }
 
