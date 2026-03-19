@@ -269,38 +269,38 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // 播放成功提示音 - 使用通知音调
+    // 播放成功提示音 - 单次提示音
     private void playSuccessSound() {
         if (toneGenerator != null) {
-            toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 150);
+            toneGenerator.startTone(ToneGenerator.TONE_PROP_ACK, 200);
         }
     }
 
-    // 播放失败提示音 - 使用错误音调
+    // 播放失败提示音 - 单次错误音
     private void playFailSound() {
         if (toneGenerator != null) {
-            toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 300);
+            toneGenerator.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 300);
         }
     }
 
-    // 成功震动 - 短震动
+    // 成功震动 - 两次短震，更明显
     private void vibrateSuccess() {
         if (vibrator != null && vibrator.hasVibrator()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE));
+                vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 150, 80, 150}, -1));
             } else {
-                vibrator.vibrate(100);
+                vibrator.vibrate(new long[]{0, 150, 80, 150}, -1);
             }
         }
     }
 
-    // 失败震动 - 长震动
+    // 失败震动 - 三次短震，更强烈
     private void vibrateFail() {
         if (vibrator != null && vibrator.hasVibrator()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 200, 100, 200}, -1));
+                vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 200, 100, 200, 100, 200}, -1));
             } else {
-                vibrator.vibrate(new long[]{0, 200, 100, 200}, -1);
+                vibrator.vibrate(new long[]{0, 200, 100, 200, 100, 200}, -1);
             }
         }
     }
