@@ -2,28 +2,219 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="#1a1a2e">
 
+    <!-- 顶部标题栏 -->
+    <LinearLayout
+        android:id="@+id/header"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="48dp"
+        android:paddingBottom="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📱 PM码扫码器"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnTorch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="💡 开"
+            android:textColor="#00d4ff"
+            android:textSize="13sp"
+            android:background="@drawable/btn_torch_bg"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp" />
+    </LinearLayout>
+
+    <!-- 相机预览 -->
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintBottom_toTopOf="@+id/textViewResult"
+        android:layout_marginHorizontal="16dp"
+        app:layout_constraintBottom_toTopOf="@+id/resultPanel"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toBottomOf="@+id/header" />
 
-    <TextView
-        android:id="@+id/textViewResult"
+    <!-- 扫描框装饰叠加层 -->
+    <FrameLayout
+        android:id="@+id/scanOverlay"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginHorizontal="16dp"
+        app:layout_constraintBottom_toTopOf="@+id/resultPanel"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/header">
+
+        <!-- 四角装饰 -->
+        <!-- 左上角 -->
+        <View android:layout_width="36dp" android:layout_height="36dp"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="40dp"
+            android:layout_marginTop="60dp"
+            android:background="@drawable/corner_top_left" />
+
+        <!-- 右上角 -->
+        <View android:layout_width="36dp" android:layout_height="36dp"
+            android:layout_gravity="top|end"
+            android:layout_marginEnd="40dp"
+            android:layout_marginTop="60dp"
+            android:background="@drawable/corner_top_right" />
+
+        <!-- 左下角 -->
+        <View android:layout_width="36dp" android:layout_height="36dp"
+            android:layout_gravity="bottom|start"
+            android:layout_marginStart="40dp"
+            android:layout_marginBottom="80dp"
+            android:background="@drawable/corner_bottom_left" />
+
+        <!-- 右下角 -->
+        <View android:layout_width="36dp" android:layout_height="36dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="40dp"
+            android:layout_marginBottom="80dp"
+            android:background="@drawable/corner_bottom_right" />
+
+        <!-- 提示文字 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="30dp"
+            android:text="将二维码/DM码放入框内"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+    </FrameLayout>
+
+    <!-- 底部结果面板 -->
+    <LinearLayout
+        android:id="@+id/resultPanel"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:background="#FFFFFF"
-        android:padding="16dp"
-        android:text="请将条码对准相机"
-        android:textAlignment="center"
-        android:textSize="18sp"
+        android:orientation="vertical"
+        android:background="@drawable/result_panel_bg"
+        android:padding="20dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- 结果头部 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:id="@+id/iconResult"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔍"
+                android:textSize="22sp" />
+
+            <TextView
+                android:id="@+id/textViewResult"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:text="请将条码对准相机"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:maxLines="3"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <!-- 分隔线 -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#2a2a4a"
+            android:layout_marginBottom="12dp" />
+
+        <!-- 码类型和扫码时间 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="码类型"
+                    android:textColor="#666688"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/textCodeType"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="--"
+                    android:textColor="#00d4ff"
+                    android:textSize="13sp"
+                    android:layout_marginTop="2dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="扫码时间"
+                    android:textColor="#666688"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/textScanTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="--"
+                    android:textColor="#aaaacc"
+                    android:textSize="13sp"
+                    android:layout_marginTop="2dp" />
+            </LinearLayout>
+
+            <!-- 重新扫码按钮 -->
+            <TextView
+                android:id="@+id/btnRescan"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔄 继续扫码"
+                android:textColor="#00d4ff"
+                android:textSize="13sp"
+                android:background="@drawable/btn_rescan_bg"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="8dp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

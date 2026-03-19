@@ -2,6 +2,7 @@ package com.example.barcodescanner;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
 import android.os.Build;
@@ -19,11 +20,14 @@ import android.os.Bundle;
 import android.util.Log;
 import android.util.Size;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ToggleButton;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
@@ -42,6 +46,9 @@ import com.google.mlkit.vision.common.InputImage;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -53,10 +60,21 @@ public class MainActivity extends AppCompatActivity {
 
     private PreviewView previewView;
     private TextView textViewResult;
+    private TextView textCodeType;
+    private TextView textScanTime;
+    private TextView btnTorch;
+    private TextView btnRescan;
+    private TextView iconResult;
+    private FrameLayout scanOverlay;
+
     private BarcodeScanner barcodeScanner;
     private ExecutorService cameraExecutor;
     private ToneGenerator toneGenerator;
     private Vibrator vibrator;
+    private Camera camera;
+    private boolean isTorchOn = false;
+    private boolean isScanSuccessful = false;
+    private long lastScanTimeMs = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,6 +83,15 @@ public class MainActivity extends AppCompatActivity {
 
         previewView = findViewById(R.id.previewView);
         textViewResult = findViewById(R.id.textViewResult);
+        textCodeType = findViewById(R.id.textCodeType);
+        textScanTime = findViewById(R.id.textScanTime);
+        btnTorch = findViewById(R.id.btnTorch);
+        btnRescan = findViewById(R.id.btnRescan);
+        iconResult = findViewById(R.id.iconResult);
+        scanOverlay = findViewById(R.id.scanOverlay);
+
+        btnTorch.setOnClickListener(v -> toggleTorch());
+        btnRescan.setOnClickListener(v -> resetScan());
 
         // 创建条码扫描器 - 支持所有格式
         BarcodeScannerOptions options = new BarcodeScannerOptions.Builder()
@@ -72,15 +99,11 @@ public class MainActivity extends AppCompatActivity {
                 .build();
         barcodeScanner = BarcodeScanning.getClient(options);
 
-        // 初始化音调生成器
         initToneGenerator();
-
-        // 初始化震动器
         initVibrator();
 
         cameraExecutor = Executors.newSingleThreadExecutor();
 
-        // 检查权限
         if (allPermissionsGranted()) {
             startCamera();
         } else {
@@ -104,26 +127,20 @@ public class MainActivity extends AppCompatActivity {
             try {
                 ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
 
-                // 预览
                 Preview preview = new Preview.Builder().build();
                 preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
-                // 图像分析 - 使用 720p 分辨率提高兼容性
                 ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
                         .setTargetResolution(new Size(1280, 720))
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build();
 
-                imageAnalysis.setAnalyzer(cameraExecutor, imageProxy -> {
-                    processImageProxy(imageProxy);
-                });
+                imageAnalysis.setAnalyzer(cameraExecutor, this::processImageProxy);
 
-                // 选择后置摄像头
                 CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
 
-                // 绑定生命周期
                 cameraProvider.unbindAll();
-                cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
+                camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
 
             } catch (ExecutionException | InterruptedException e) {
                 Log.e(TAG, "相机启动失败", e);
@@ -133,45 +150,42 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void processImageProxy(ImageProxy imageProxy) {
-        try {
-            Image image = imageProxy.getImage();
-            if (image == null) {
-                imageProxy.close();
-                return;
-            }
+        // 防止重复触发
+        if (isScanSuccessful) {
+            imageProxy.close();
+            return;
+        }
 
-            // 转换为 Bitmap 用于 ML Kit
+        long now = System.currentTimeMillis();
+        if (now - lastScanTimeMs < 1000) {
+            imageProxy.close();
+            return;
+        }
+
+        try {
             Bitmap bitmap = imageProxyToBitmap(imageProxy);
             if (bitmap == null) {
                 imageProxy.close();
                 return;
             }
 
-            // 创建输入图像
             InputImage inputImage = InputImage.fromBitmap(bitmap, 0);
 
-            // 扫描条码
             barcodeScanner.process(inputImage)
                     .addOnSuccessListener(barcodes -> {
                         if (!barcodes.isEmpty()) {
                             Barcode barcode = barcodes.get(0);
                             String value = barcode.getRawValue();
-                            if (value != null) {
-                                runOnUiThread(() -> {
-                                    textViewResult.setText("识别结果:\n" + value);
-                                    Toast.makeText(this, "识别成功!", Toast.LENGTH_SHORT).show();
-                                    // 成功提示音和震动
-                                    playSuccessFeedback();
-                                });
+                            int format = barcode.getFormat();
+                            if (value != null && !isScanSuccessful) {
+                                isScanSuccessful = true;
+                                lastScanTimeMs = now;
+                                runOnUiThread(() -> onScanSuccess(value, format));
                             }
                         }
                     })
                     .addOnFailureListener(e -> {
                         Log.e(TAG, "扫描失败", e);
-                        runOnUiThread(() -> {
-                            // 失败提示音和震动
-                            playFailFeedback();
-                        });
                     })
                     .addOnCompleteListener(task -> {
                         imageProxy.close();
@@ -184,12 +198,113 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void onScanSuccess(String value, int format) {
+        String formatName = getFormatName(format);
+        String scanTime = new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date());
+
+        textViewResult.setText(value);
+        textCodeType.setText(formatName);
+        textScanTime.setText(scanTime);
+        iconResult.setText("✅");
+        btnRescan.setVisibility(View.VISIBLE);
+
+        // 隐藏扫描框提示，显示扫描结果
+        scanOverlay.setVisibility(View.GONE);
+
+        playSuccessFeedback();
+    }
+
+    private String getFormatName(int format) {
+        switch (format) {
+            case Barcode.FORMAT_QR_CODE: return "二维码 (QR)";
+            case Barcode.FORMAT_DATA_MATRIX: return "Data Matrix (DM码)";
+            case Barcode.FORMAT_PDF417: return "PDF417";
+            case Barcode.FORMAT_AZTEC: return "Aztec";
+            case Barcode.FORMAT_CODABAR: return "Codabar";
+            case Barcode.FORMAT_CODE_128: return "Code 128";
+            case Barcode.FORMAT_CODE_39: return "Code 39";
+            case Barcode.FORMAT_CODE_93: return "Code 93";
+            case Barcode.FORMAT_EAN_13: return "EAN-13";
+            case Barcode.FORMAT_EAN_8: return "EAN-8";
+            case Barcode.FORMAT_ITF: return "ITF-14";
+            case Barcode.FORMAT_UPC_A: return "UPC-A";
+            case Barcode.FORMAT_UPC_E: return "UPC-E";
+            default: return "条码 (" + format + ")";
+        }
+    }
+
+    private void resetScan() {
+        isScanSuccessful = false;
+        lastScanTimeMs = 0;
+        textViewResult.setText("请将条码对准相机");
+        textCodeType.setText("--");
+        textScanTime.setText("--");
+        iconResult.setText("🔍");
+        btnRescan.setVisibility(View.GONE);
+        scanOverlay.setVisibility(View.VISIBLE);
+    }
+
+    private void toggleTorch() {
+        if (camera == null) return;
+        isTorchOn = !isTorchOn;
+        camera.getCameraControl().enableTorch(isTorchOn);
+        btnTorch.setText(isTorchOn ? "🔦 关" : "💡 开");
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_CODE_PERMISSIONS) {
+            if (allPermissionsGranted()) {
+                startCamera();
+            } else {
+                Toast.makeText(this, "需要相机权限才能扫描", Toast.LENGTH_SHORT).show();
+                finish();
+            }
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (toneGenerator != null) toneGenerator.release();
+        cameraExecutor.shutdown();
+        barcodeScanner.close();
+    }
+
+    private void initToneGenerator() {
+        try {
+            toneGenerator = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100);
+        } catch (Exception e) {
+            Log.e(TAG, "初始化音调生成器失败", e);
+        }
+    }
+
+    private void initVibrator() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            VibratorManager vibratorManager = (VibratorManager) getSystemService(VIBRATOR_MANAGER_SERVICE);
+            vibrator = vibratorManager.getDefaultVibrator();
+        } else {
+            vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+        }
+    }
+
+    private void playSuccessFeedback() {
+        if (toneGenerator != null) toneGenerator.startTone(ToneGenerator.TONE_PROP_ACK, 200);
+        if (vibrator != null && vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 150, 80, 150}, -1));
+            } else {
+                vibrator.vibrate(new long[]{0, 150, 80, 150}, -1);
+            }
+        }
+    }
+
     private Bitmap imageProxyToBitmap(ImageProxy imageProxy) {
         try {
             Image image = imageProxy.getImage();
             if (image == null) return null;
 
-            // 获取 YUV 数据
             Image.Plane[] planes = image.getPlanes();
             ByteBuffer yBuffer = planes[0].getBuffer();
             ByteBuffer uBuffer = planes[1].getBuffer();
@@ -212,7 +327,6 @@ public class MainActivity extends AppCompatActivity {
 
             Bitmap bitmap = BitmapFactory.decodeByteArray(outputStream.toByteArray(), 0, outputStream.size());
 
-            // 旋转图像
             if (imageProxy.getImageInfo().getRotationDegrees() != 0) {
                 Matrix matrix = new Matrix();
                 matrix.postRotate(imageProxy.getImageInfo().getRotationDegrees());
@@ -225,95 +339,5 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "图像转换失败", e);
             return null;
         }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_CODE_PERMISSIONS) {
-            if (allPermissionsGranted()) {
-                startCamera();
-            } else {
-                Toast.makeText(this, "需要相机权限才能扫描", Toast.LENGTH_SHORT).show();
-                finish();
-            }
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (toneGenerator != null) {
-            toneGenerator.release();
-            toneGenerator = null;
-        }
-        cameraExecutor.shutdown();
-        barcodeScanner.close();
-    }
-
-    private void initToneGenerator() {
-        // 创建音调生成器，使用通知音量
-        try {
-            toneGenerator = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100);
-        } catch (Exception e) {
-            Log.e(TAG, "初始化音调生成器失败", e);
-        }
-    }
-
-    private void initVibrator() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            VibratorManager vibratorManager = (VibratorManager) getSystemService(VIBRATOR_MANAGER_SERVICE);
-            vibrator = vibratorManager.getDefaultVibrator();
-        } else {
-            vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
-        }
-    }
-
-    // 播放成功提示音 - 单次提示音
-    private void playSuccessSound() {
-        if (toneGenerator != null) {
-            toneGenerator.startTone(ToneGenerator.TONE_PROP_ACK, 200);
-        }
-    }
-
-    // 播放失败提示音 - 单次错误音
-    private void playFailSound() {
-        if (toneGenerator != null) {
-            toneGenerator.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 300);
-        }
-    }
-
-    // 成功震动 - 两次短震，更明显
-    private void vibrateSuccess() {
-        if (vibrator != null && vibrator.hasVibrator()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 150, 80, 150}, -1));
-            } else {
-                vibrator.vibrate(new long[]{0, 150, 80, 150}, -1);
-            }
-        }
-    }
-
-    // 失败震动 - 三次短震，更强烈
-    private void vibrateFail() {
-        if (vibrator != null && vibrator.hasVibrator()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 200, 100, 200, 100, 200}, -1));
-            } else {
-                vibrator.vibrate(new long[]{0, 200, 100, 200, 100, 200}, -1);
-            }
-        }
-    }
-
-    // 组合提示 - 成功
-    private void playSuccessFeedback() {
-        playSuccessSound();
-        vibrateSuccess();
-    }
-
-    // 组合提示 - 失败
-    private void playFailFeedback() {
-        playFailSound();
-        vibrateFail();
     }
 }

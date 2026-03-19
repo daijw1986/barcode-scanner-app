@@ -7,4 +7,13 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- 深色主题 -->
+    <color name="bg_dark">#FF1A1A2E</color>
+    <color name="panel_dark">#FF16213E</color>
+    <color name="accent_cyan">#FF00D4FF</color>
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#FFAAAACC</color>
+    <color name="text_hint">#FF666688</color>
+    <color name="success_green">#FF00FF88</color>
 </resources>
