@@ -15,6 +15,8 @@ import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.media.Image;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Size;
@@ -265,10 +267,20 @@ public class MainActivity extends AppCompatActivity {
                 .setAudioAttributes(audioAttributes)
                 .build();
 
-        // 加载系统默认通知音效作为成功/失败声音
-        // 使用系统内置声音，无需额外资源文件
-        soundSuccess = soundPool.load(this, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI, 1);
-        soundFail = soundPool.load(this, android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI, 1);
+        // 通过 RingtoneManager 获取系统默认通知音
+        try {
+            Uri notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+            Uri alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+            
+            if (notificationUri != null) {
+                soundSuccess = soundPool.load(this, notificationUri, 1);
+            }
+            if (alarmUri != null) {
+                soundFail = soundPool.load(this, alarmUri, 1);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "加载系统音效失败", e);
+        }
     }
 
     private void initVibrator() {
